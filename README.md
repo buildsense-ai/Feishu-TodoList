@@ -4,6 +4,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-green.svg)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18%2B-blue.svg)](https://reactjs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![AI Powered](https://img.shields.io/badge/AI-DeepSeek%20%2B%20Gemini-purple.svg)](https://github.com/buildsense-ai/Feishu-TodoList)
 
@@ -19,6 +20,7 @@ Feishu-TodoList 是一个创新的AI驱动项目管理系统，专为团队协�
 - **🔄 完整闭环流程**: 会议记录 → AI分析 → 飞书群发送 → 消息获取 → ToDoList生成
 - **💾 企业级数据管理**: MySQL存储，支持历史查询和工作负载分析
 - **📊 可视化统计**: 团队工作负载分布和趋势分析
+- **🌐 现代化界面**: React前端 + FastAPI后端的全栈解决方案
 
 ## 🎯 工作流程
 
@@ -33,7 +35,7 @@ graph TB
     G --> H[Gemini AI分析]
     H --> I[生成ToDoList]
     I --> J[保存MySQL数据库]
-    J --> K[团队查看任务分配]
+    J --> K[React前端展示任务]
 ```
 
 ### 📅 两个关键时间点
@@ -41,13 +43,50 @@ graph TB
 1. **会议后（实时处理）**: 会议记录 → AI分析 → 发送飞书群
 2. **每日上午10:30（定时任务）**: 分析昨天10:30到今天10:30的所有消息 → 生成ToDoList
 
-## 🏗️ 系统架构
+## 🏗️ 项目结构
 
-### 核心组件
+```
+Feishu-TodoList/
+├── backend/                    # 后端Python代码
+│   ├── feishu_api_server.py   # FastAPI主服务器
+│   ├── ai_message_processor.py # AI消息分析器
+│   ├── database_manager.py    # 数据库管理器
+│   ├── feishu_message_fetcher.py # 飞书消息获取器
+│   ├── feishu_bot_sender.py   # 飞书机器人发送器
+│   ├── feishu_user_id_mapper.py # 用户ID映射器
+│   ├── production_start.py    # 生产环境启动脚本
+│   ├── requirements.txt       # Python依赖包
+│   ├── start_server.sh       # Linux启动脚本
+│   └── stop_server.sh        # Linux停止脚本
+├── frontend/                   # 前端React应用
+│   ├── src/                   # 源码目录
+│   │   ├── App.js            # 主应用组件
+│   │   ├── components/       # React组件
+│   │   │   ├── Dashboard.js  # 仪表板组件
+│   │   │   ├── MeetingUpload.js # 会议上传组件
+│   │   │   └── SystemMonitor.js # 系统监控组件
+│   │   └── index.js          # 应用入口
+│   ├── public/               # 静态资源
+│   ├── package.json          # Node.js依赖配置
+│   └── package-lock.json     # 依赖版本锁定
+├── README.md                  # 项目文档
+├── README_Frontend.md         # 前端专用文档
+├── API接口文档.md            # API接口说明
+├── 项目结构说明.md           # 详细结构说明
+├── start_dev.bat             # Windows快速启动脚本
+└── .gitignore               # Git忽略配置
+```
+
+### 核心架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Feishu-TodoList 系统架构                  │
+│                  Feishu-TodoList 系统架构                    │
+├─────────────────────────────────────────────────────────────┤
+│  🌐 前端展示层 (React)                                       │
+│  ├── 任务看板界面                                            │
+│  ├── 会议记录上传                                            │
+│  └── 系统监控面板                                            │
 ├─────────────────────────────────────────────────────────────┤
 │  🎤 会议记录处理层                                           │
 │  ├── DeepSeek AI Engine (会议分析)                         │
@@ -69,8 +108,8 @@ graph TB
 │  ├── 历史记录管理                                            │
 │  └── 工作负载统计                                            │
 ├─────────────────────────────────────────────────────────────┤
-│  🌐 API服务层                                                │
-│  ├── FastAPI RESTful接口                                    │
+│  🌐 API服务层 (FastAPI)                                      │
+│  ├── RESTful接口服务                                         │
 │  ├── 自动化API文档                                           │
 │  └── 健康状态监控                                            │
 └─────────────────────────────────────────────────────────────┘
@@ -80,11 +119,12 @@ graph TB
 
 | 层级 | 技术选型 | 说明 |
 |------|----------|------|
+| **前端框架** | React 18+ | 现代化用户界面 |
 | **后端框架** | FastAPI | 高性能异步Web框架 |
 | **AI服务** | DeepSeek + Gemini 2.5 | 双AI引擎，分工明确 |
 | **数据库** | MySQL 5.7+ | 企业级关系数据库 |
 | **消息平台** | 飞书开放平台API | 企业级即时通讯 |
-| **部署** | Python 3.8+ | 跨平台部署支持 |
+| **部署** | Python 3.8+ / Node.js 16+ | 全栈跨平台部署 |
 
 ## 👥 团队成员管理
 
@@ -102,8 +142,15 @@ graph TB
 
 ### 1. 环境要求
 
+**后端环境：**
 - **Python**: 3.8+
 - **MySQL**: 5.7+
+
+**前端环境：**
+- **Node.js**: 16+
+- **npm**: 8+
+
+**系统要求：**
 - **内存**: 4GB+
 - **网络**: 稳定的互联网连接
 
@@ -114,15 +161,18 @@ git clone https://github.com/buildsense-ai/Feishu-TodoList.git
 cd Feishu-TodoList
 ```
 
-### 3. 安装依赖
+### 3. 后端设置
 
 ```bash
+# 进入后端目录
+cd backend
+
+# 安装Python依赖
 pip install -r requirements.txt
+
+# 配置环境变量
+# 编辑 feishu_api_server.py 中的配置：
 ```
-
-### 4. 配置环境
-
-编辑 `feishu_api_server.py` 中的配置：
 
 ```python
 # 飞书应用配置
@@ -131,7 +181,20 @@ APP_SECRET = "your_feishu_app_secret"
 DEFAULT_CONTAINER_ID = "your_group_chat_id"
 
 # AI服务配置
-OPENROUTER_API_KEY = "your_openrouter_api_key"
+DEEPSEEK_API_KEY = "your_deepseek_api_key"
+```
+
+### 4. 前端设置
+
+```bash
+# 进入前端目录
+cd frontend
+
+# 安装Node.js依赖
+npm install
+
+# 配置API地址（如需要）
+# 编辑 src/config.js 中的后端API地址
 ```
 
 ### 5. 数据库设置
@@ -148,25 +211,59 @@ GRANT ALL PRIVILEGES ON meeting_summaries_db.* TO 'your_user'@'localhost';
 
 ### 6. 启动系统
 
+#### 方式1：使用快速启动脚本（Windows推荐）
+
 ```bash
-# 方式1：生产环境启动（推荐）
+# 根目录下运行，自动启动后端和前端
+start_dev.bat
+```
+
+#### 方式2：分别启动前后端
+
+**启动后端：**
+```bash
+cd backend
+
+# 生产环境启动（推荐）
 python production_start.py
 
-# 方式2：开发环境启动
+# 或开发环境启动
 python feishu_api_server.py
+```
+
+**启动前端：**
+```bash
+cd frontend
+
+# 开发环境启动
+npm start
+
+# 生产环境构建
+npm run build
 ```
 
 ### 7. 验证安装
 
-- **API文档**: http://localhost:8000/docs
-- **健康检查**: http://localhost:8000/health
+- **后端API文档**: http://localhost:8000/docs
+- **后端健康检查**: http://localhost:8000/health
+- **前端应用**: http://localhost:3000
 - **系统状态**: 确认AI服务和数据库连接正常
 
 ## 💡 使用指南
 
 ### 🎤 会议记录处理
 
-#### 方法1: 文件上传（推荐）
+#### 方法1: 通过前端界面上传（推荐）
+
+1. 访问 http://localhost:3000
+2. 点击"会议记录上传"
+3. 选择会议记录文件或粘贴文本
+4. 点击"一键处理"，系统将自动：
+   - AI分析会议内容
+   - 保存到数据库
+   - 发送摘要到飞书群
+
+#### 方法2: API调用
 
 ```bash
 # 上传会议记录文件，一键完成分析和发送
@@ -174,16 +271,15 @@ curl -X POST "http://localhost:8000/meeting/process-complete" \
   -F "file=@your_meeting_record.txt"
 ```
 
-#### 方法2: 文本分析
-
-```bash
-# 直接分析会议记录文本
-curl -X POST "http://localhost:8000/meeting/analyze" \
-  -H "Content-Type: application/json" \
-  -d '{"transcript": "会议记录内容..."}'
-```
-
 ### 📋 ToDoList生成
+
+#### 通过前端界面
+
+1. 访问前端仪表板
+2. 点击"生成今日ToDoList"
+3. 查看按人员分组的任务列表
+
+#### 通过API调用
 
 ```bash
 # 生成每日ToDoList（分析昨天10:30到今天10:30的消息）
@@ -220,111 +316,92 @@ curl "http://localhost:8000/db/daily-summary?target_date=2024-06-04"
 | `/db/member-workload` | GET | 团队工作负载统计 | ✅ 稳定 |
 | `/health` | GET | 系统健康检查 | ✅ 稳定 |
 
-### 📋 ToDoList数据格式
-
-```json
-{
-  "analysis_timestamp": "2024-06-04T13:42:57.723735",
-  "analysis_type": "daily_todolist",
-  "model": "google/gemini-2.5-pro-preview",
-  "daily_todolist": {
-    "ToDo": {
-      "Michael": ["前端界面优化", "用户体验测试"],
-      "小钟": ["数据库性能优化", "API开发"],
-      "国伟": ["验证码识别方案研究"],
-      "云起": ["AI模型训练数据收集"],
-      "Gauz": ["系统监控模块开发"],
-      "团队": ["代码评审机制建立"]
-    },
-    "Done": {
-      "Michael": ["完成用户登录界面"],
-      "小钟": ["用户认证模块上线"],
-      "国伟": ["爬取70%目标数据"],
-      "云起": ["语音识别准确率达95%"],
-      "Gauz": ["数据库查询性能提升30%"]
-    },
-    "Issue": {
-      "Michael": ["移动设备适配兼容性问题"],
-      "小钟": ["高并发下API响应时间过长"],
-      "国伟": ["动态验证码识别难题"],
-      "云起": ["噪音环境下识别率下降"],
-      "Gauz": ["数据库连接池配置需优化"]
-    }
-  },
-  "message_count": 42,
-  "status": "success"
-}
-```
-
 详细API文档请查看：[API接口文档.md](API接口文档.md)
 
 ## 🔧 部署指南
 
 ### 本地开发环境
 
+**后端开发：**
 ```bash
-# 1. 安装依赖
+cd backend
 pip install -r requirements.txt
-
-# 2. 启动开发服务器
 python feishu_api_server.py
+```
 
-# 3. 访问API文档
-open http://localhost:8000/docs
+**前端开发：**
+```bash
+cd frontend  
+npm install
+npm start
 ```
 
 ### 生产环境部署
 
 #### 使用Docker（推荐）
 
+**后端Dockerfile：**
 ```dockerfile
-# Dockerfile
 FROM python:3.9-slim
-
 WORKDIR /app
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install -r requirements.txt
-
-COPY . .
+COPY backend/ .
 EXPOSE 8000
-
 CMD ["python", "production_start.py"]
 ```
 
-```bash
-# 构建和运行
-docker build -t feishu-todolist .
-docker run -p 8000:8000 feishu-todolist
+**前端Dockerfile：**
+```dockerfile
+FROM node:16-alpine
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+**Docker Compose：**
+```yaml
+version: '3.8'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MYSQL_HOST=mysql
+    depends_on:
+      - mysql
+      
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+      
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: yourpassword
+      MYSQL_DATABASE: feishu_todolist
+    ports:
+      - "3306:3306"
 ```
 
 #### 使用PM2进程管理
 
 ```bash
-# 安装PM2
-npm install -g pm2
+# 启动后端服务
+cd backend
+pm2 start feishu_api_server.py --name "feishu-backend"
 
-# 启动服务
-pm2 start ecosystem.config.js
-
-# 查看状态
-pm2 status
-pm2 logs feishu-todolist
-```
-
-#### 使用Nginx反向代理
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-}
+# 启动前端服务
+cd frontend
+pm2 start npm --name "feishu-frontend" -- start
 ```
 
 ### 定时任务设置
@@ -339,29 +416,35 @@ server {
 ### 健康检查
 
 ```bash
-# 系统健康状态
+# 后端健康状态
 curl http://localhost:8000/health
 
 # 数据库连接状态
 curl http://localhost:8000/db/health
+
+# 前端服务状态
+curl http://localhost:3000
 ```
 
 ### 日志管理
 
 ```bash
-# 查看系统日志
+# 查看后端日志
+cd backend
 tail -f logs/feishu-todolist.log
 
-# 错误日志过滤
-grep "ERROR" logs/feishu-todolist.log
+# 查看前端构建日志
+cd frontend
+npm run build --verbose
 ```
 
 ### 性能监控
 
 - **API响应时间**: 监控关键接口性能
 - **数据库连接**: 监控MySQL连接池状态
-- **AI服务调用**: 监控OpenRouter API调用成功率
-- **内存使用**: 监控Python进程内存占用
+- **AI服务调用**: 监控DeepSeek/Gemini API调用成功率
+- **前端性能**: 监控React应用加载和渲染性能
+- **内存使用**: 监控前后端进程内存占用
 
 ## 🔒 安全考虑
 
@@ -370,14 +453,15 @@ grep "ERROR" logs/feishu-todolist.log
 ```bash
 # 使用环境变量存储敏感信息
 export FEISHU_APP_SECRET="your_secret"
-export OPENROUTER_API_KEY="your_key"
+export DEEPSEEK_API_KEY="your_key"
 export MYSQL_PASSWORD="your_password"
 ```
 
 ### 网络安全
 
 - **HTTPS**: 生产环境强制使用HTTPS
-- **防火墙**: 限制8000端口的访问来源
+- **CORS**: 配置正确的跨域访问策略
+- **防火墙**: 限制端口访问来源
 - **API限流**: 防止恶意调用和滥用
 
 ### 数据安全
@@ -399,7 +483,8 @@ export MYSQL_PASSWORD="your_password"
 ### 代码规范
 
 - **Python**: 遵循PEP 8编码规范
-- **注释**: 关键函数和类需要详细注释
+- **JavaScript/React**: 遵循ESLint配置规范
+- **注释**: 关键函数和组件需要详细注释
 - **测试**: 新功能需要编写对应的测试用例
 - **文档**: 更新相关文档说明
 
@@ -414,8 +499,15 @@ export MYSQL_PASSWORD="your_password"
 ### 官方文档
 
 - [飞书开放平台](https://open.feishu.cn/document/)
-- [OpenRouter API](https://openrouter.ai/docs)
+- [DeepSeek API](https://platform.deepseek.com/api-docs/)
 - [FastAPI文档](https://fastapi.tiangolo.com/)
+- [React文档](https://reactjs.org/docs/)
+
+### 项目文档
+
+- [前端专用文档](README_Frontend.md)
+- [API接口文档](API接口文档.md)
+- [项目结构说明](项目结构说明.md)
 
 ### 社区支持
 
@@ -451,21 +543,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## 🌟 致谢
+## 🎉 更新日志
 
-感谢以下开源项目和服务提供商：
+### v2.7.0 (最新)
+- ✨ 新增React前端用户界面
+- 🏗️ 重构项目结构，分离前后端
+- 📊 增强数据可视化功能
+- 🔧 优化部署和开发体验
 
-- **FastAPI**: 提供高性能Web框架
-- **OpenRouter**: 提供AI模型接口服务
-- **飞书**: 提供企业级通讯平台
-- **MySQL**: 提供可靠的数据库服务
+### v2.6.0
+- 🤖 集成DeepSeek AI处理会议记录
+- 📝 完整会议记录处理流程
+- 💾 MySQL数据库存储优化
 
 ---
 
-<div align="center">
-
-**🚀 立即体验 Feishu-TodoList，让AI为您的团队管理赋能！**
-
-[⭐ Star](https://github.com/buildsense-ai/Feishu-TodoList) | [🐛 反馈问题](https://github.com/buildsense-ai/Feishu-TodoList/issues) | [📖 查看文档](https://github.com/buildsense-ai/Feishu-TodoList/wiki)
-
-</div> 
+**🚀 快速体验：** 运行 `start_dev.bat` 一键启动完整系统！ 
