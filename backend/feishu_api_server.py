@@ -13,6 +13,7 @@ import httpx
 import mysql.connector
 from mysql.connector import Error
 import requests
+import pymysql.cursors
 
 app = FastAPI(
     title="飞书消息AI分析系统",
@@ -22,7 +23,7 @@ app = FastAPI(
 ### 🎯 核心功能
 - **飞书消息智能获取**: 自动拉取群组消息（昨天10:30到今天10:30）
 - **用户ID映射**: 自动将sender_id映射为真实姓名
-- **AI智能分析**: 基于OpenRouter Gemini 2.5生成ToDoList
+- **AI智能分析**: 基于DeepSeek API生成ToDoList
 - **按人员分组管理**: 自动识别5个团队成员，任务清晰分类
 - **数据库持久化**: MySQL存储ToDoList分析结果
 
@@ -50,15 +51,15 @@ app = FastAPI(
 
 ### 🛠️ 配置要求
 - 飞书App ID/Secret  
-- OpenRouter API Key (Gemini 2.5)
+- DeepSeek API Key
 - MySQL数据库连接
 
 ### 📋 使用流程
-1. 配置飞书应用、OpenRouter密钥和MySQL数据库
+1. 配置飞书应用、DeepSeek密钥和MySQL数据库
 2. 调用 `/daily-todolist` API生成每日ToDoList
 3. 使用 `/db/*` API查询历史数据和统计分析
 
-技术栈: FastAPI + Gemini 2.5 + 飞书API + MySQL
+技术栈: FastAPI + DeepSeek + 飞书API + MySQL
     """,
     version="2.7.0",
     contact={
@@ -72,13 +73,13 @@ APP_ID = "cli_a778ea0d0278100e"
 APP_SECRET = "9h4EoFmjeTPgR344VWKu8fDmnxW76Cru"
 DEFAULT_CONTAINER_ID = "oc_58605a887f1e11e359ceec1782c2d12d"  # 默认群聊ID
 
-# AI配置 - OpenRouter API
-OPENROUTER_API_KEY = "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"
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-AI_MODEL = "google/gemini-2.5-pro-preview"  # OpenRouter中的Gemini 2.5模型
+# AI配置 - DeepSeek API 直连
+DEEPSEEK_API_KEY = "sk-d2513b4c4626409599a73ba64b2e9033"
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+AI_MODEL = "deepseek-chat"  # DeepSeek官方模型
 
 # 向后兼容，也支持从环境变量获取
-API_KEY = os.getenv("OPENROUTER_API_KEY", OPENROUTER_API_KEY)
+API_KEY = os.getenv("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
 
 # 请求模型
 class MessageRequest(BaseModel):
@@ -113,10 +114,10 @@ async def root():
     return {
         "message": "飞书消息获取&AI分析API服务",
         "version": "2.7.0",
-        "ai_provider": "OpenRouter Gemini 2.5",
+        "ai_provider": "DeepSeek API",
         "features": [
             "📥 获取飞书群聊消息",
-            "🤖 OpenRouter Gemini 2.5智能项目分析",
+            "🤖 DeepSeek API智能项目分析",
             "👥 按团队成员分组任务",
             "📊 TODO/DONE/ISSUES深度提取",
             "⏰ 每日ToDoList定时生成（前一天10:30到今天10:30）",
@@ -136,7 +137,9 @@ async def root():
             "GET /db/latest-todolist - 从数据库获取最新ToDoList",
             "GET /db/member-workload - 获取成员工作负载统计",
             "GET /db/daily-summary - 获取指定日期ToDoList汇总",
-            "GET /db/health - 检查数据库连接健康状态"
+            "GET /db/health - 检查数据库连接健康状态",
+            "GET /debug/db-records - 调试用：查看数据库中今天的记录",
+            "GET /debug/db-record/{record_id} - 调试用：查看指定ID的记录详细内容"
         ]
     }
 
@@ -147,7 +150,7 @@ async def health_check():
         "status": "healthy", 
         "timestamp": datetime.now().isoformat(),
         "ai_available": bool(API_KEY),
-        "ai_provider": "OpenRouter Gemini 2.5",
+        "ai_provider": "DeepSeek API",
         "ai_model": AI_MODEL,
         "version": "2.7.0",
         "features": {
@@ -159,6 +162,50 @@ async def health_check():
             "workload_analytics": True
         }
     }
+
+@app.get("/debug/message-flow")
+async def debug_message_flow():
+    """调试接口：展示消息处理流程"""
+    try:
+        # 获取示例消息
+        fetcher = FeishuMessageFetcher(
+            app_id=APP_ID,
+            app_secret=APP_SECRET
+        )
+        
+        now = datetime.now()
+        today_1030 = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=10, minutes=30)
+        yesterday_1030 = today_1030 - timedelta(days=1)
+        
+        messages_data = fetcher.get_all_messages(
+            container_id="oc_58605a887f1e11e359ceec1782c2d12d",
+            start_time=str(int(yesterday_1030.timestamp())),
+            end_time=str(int(today_1030.timestamp())),
+            download_files=False
+        )
+        
+        messages = messages_data.get("messages", [])
+        
+        # 构建消息摘要
+        message_summary = build_daily_message_summary(messages)
+        
+        return {
+            "success": True,
+            "data": {
+                "raw_messages": messages[:2],  # 只返回前2条消息
+                "processed_summary": message_summary,
+                "total_messages": len(messages),
+                "sample_sender_mapping": {
+                    "cli_a778ea0d0278100e": "飞书机器人"
+                }
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @app.post("/ai-analyze")
 async def ai_analyze_project(request: AIProcessRequest):
@@ -185,7 +232,7 @@ async def ai_analyze_project(request: AIProcessRequest):
         # 2. AI项目分析 (仅使用AI)
         ai_api_key = request.ai_api_key or API_KEY
         if not ai_api_key:
-            raise ValueError("需要OpenRouter API密钥才能进行分析")
+            raise ValueError("需要DeepSeek API密钥才能进行分析")
             
         analyzer = AIProjectAnalyzer(
             api_key=ai_api_key,
@@ -204,7 +251,7 @@ async def ai_analyze_project(request: AIProcessRequest):
             "message": "AI项目分析完成",
             "data": analysis_result,
             "output_file": output_file,
-            "processing_mode": "OpenRouter Gemini 2.5",
+            "processing_mode": "DeepSeek API",
             "ai_model": AI_MODEL
         }
         
@@ -311,6 +358,20 @@ async def generate_simple_daily_todolist(analyzer, messages_data):
     
     messages = messages_data.get("messages", [])
     
+    # 调试输出：显示原始飞书消息
+    print(f"\n🔍 调试信息 - 从飞书获取的原始消息:")
+    print("=" * 80)
+    for i, msg in enumerate(messages[:3]):  # 只显示前3条消息避免输出过长
+        print(f"消息 {i+1}:")
+        print(f"  ID: {msg.get('message_id', 'N/A')}")
+        print(f"  类型: {msg.get('msg_type', 'N/A')}")
+        print(f"  发送者: {msg.get('sender', {})}")
+        print(f"  内容预览: {str(msg.get('text', msg.get('content', '')))[:200]}...")
+        print("-" * 40)
+    if len(messages) > 3:
+        print(f"... 还有 {len(messages) - 3} 条消息")
+    print("=" * 80)
+    
     if not messages:
         print("⚠️ 没有找到消息，返回空ToDoList")
         return {
@@ -329,23 +390,32 @@ async def generate_simple_daily_todolist(analyzer, messages_data):
     # 构建消息摘要（包含sender_id到人名的映射）
     message_summary = build_daily_message_summary(messages)
     
+    # 调试输出：显示传给AI的消息摘要
+    print(f"\n🔍 调试信息 - 传给DeepSeek的消息摘要:")
+    print("=" * 80)
+    print(message_summary)
+    print("=" * 80)
+    
     # 调用AI进行今日ToDoList分析
-    prompt = f"""从以下飞书群聊消息中提取工作任务，分配给团队成员。
+    prompt = f"""从以下飞书群聊消息中严格提取工作任务信息，不要添加或推测任何原文中没有的内容。
 
-团队成员（仅限5人）:
-- Michael: 前端UI
-- 小钟: 后端数据库  
-- 国伟: 爬虫数据
-- 云起: AI语音
-- Gauz: 架构性能
+重要规则：
+1. 只提取消息中明确提到的具体任务、工作和问题
+2. 不要根据讨论内容推测或生成新的任务
+3. 如果消息中没有具体任务，返回空列表
+4. 严格使用原文中的表述，不要改写或优化
+
+团队成员映射：
+- Michael/王子鉴 → Michael
+- 小钟/钟悦心 → 小钟  
+- 国伟/陈国伟 → 国伟
+- 云起/查云起 → 云起
+- Gauz → Gauz
 
 消息内容:
 {message_summary}
 
-输出要求:
-1. 只能为上述5个人分配任务
-2. 根据任务类型和消息内容智能分配
-3. 严格按JSON格式输出
+严格按JSON格式输出，只包含原文中明确提到的内容：
 
 {{
     "ToDo": {{"Michael": [], "小钟": [], "国伟": [], "云起": [], "Gauz": [], "团队": []}},
@@ -355,10 +425,8 @@ async def generate_simple_daily_todolist(analyzer, messages_data):
 
     try:
         headers = {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": f"Bearer {analyzer.api_key}",
-            "HTTP-Referer": "https://feishu-analyzer.com",
-            "X-Title": "Feishu Daily ToDoList Generator"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {analyzer.api_key}"
         }
         
         payload = {
@@ -366,7 +434,7 @@ async def generate_simple_daily_todolist(analyzer, messages_data):
             "messages": [
                 {
                     "role": "system",
-                    "content": "你是专业的项目任务管理助手。严格规则：只能为Michael、小钟、国伟、云起、Gauz这5个人分配任务。绝对不允许输出其他任何人名，必须将所有任务重新分配给这5个真实团队成员。"
+                    "content": "你是信息提取助手。严格规则：1) 只提取原文中明确提到的任务，绝不推测或添加；2) 只为Michael、小钟、国伟、云起、Gauz这5个人提取任务；3) 如果原文没有明确任务，返回空列表；4) 使用原文表述，不改写。"
                 },
                 {
                     "role": "user",
@@ -409,7 +477,7 @@ async def generate_simple_daily_todolist(analyzer, messages_data):
                 "status": "success"
             }
         else:
-            raise Exception(f"OpenRouter API调用失败: {response.status_code} - {response.text}")
+            raise Exception(f"DeepSeek API调用失败: {response.status_code} - {response.text}")
             
     except Exception as e:
         print(f"❌ AI分析失败: {e}")
@@ -427,68 +495,7 @@ async def generate_simple_daily_todolist(analyzer, messages_data):
             "error": str(e)
         }
 
-def filter_todolist_by_real_members(ai_response):
-    """
-    过滤ToDoList，只保留真实团队成员的任务
-    
-    Args:
-        ai_response (str): AI生成的原始响应
-        
-    Returns:
-        str: 过滤后的响应
-    """
-    try:
-        # 尝试解析JSON
-        import re
-        json_match = re.search(r'```json\s*(\{.*?\})\s*```', ai_response, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            # 如果没有markdown格式，尝试直接解析
-            json_str = ai_response.strip()
-        
-        import json
-        todolist_data = json.loads(json_str)
-        
-        # 获取真实团队成员
-        real_members = get_real_team_members()
-        allowed_categories = real_members + ['团队', '技术']  # 允许的分类
-        
-        # 过滤每个分类
-        filtered_data = {}
-        for category in ['ToDo', 'Done', 'Issue']:
-            if category in todolist_data:
-                filtered_category = {}
-                for person, tasks in todolist_data[category].items():
-                    # 标准化人员名称
-                    normalized_name = normalize_team_member_name(person)
-                    if normalized_name:
-                        # 使用标准化的名称
-                        if normalized_name in filtered_category:
-                            filtered_category[normalized_name].extend(tasks)
-                        else:
-                            filtered_category[normalized_name] = tasks
-                    elif person in ['团队', '技术']:
-                        # 保留团队和技术分类
-                        if person in filtered_category:
-                            filtered_category[person].extend(tasks)
-                        else:
-                            filtered_category[person] = tasks
-                    else:
-                        print(f"⚠️ 过滤掉无效人员: {person}")
-                
-                filtered_data[category] = filtered_category
-        
-        # 重新生成JSON响应
-        filtered_json = json.dumps(filtered_data, ensure_ascii=False, indent=2)
-        filtered_response = f"```json\n{filtered_json}\n```"
-        
-        print(f"✅ ToDoList过滤完成，只保留真实团队成员: {', '.join(real_members)}")
-        return filtered_response
-        
-    except Exception as e:
-        print(f"⚠️ ToDoList过滤失败: {e}")
-        return ai_response  # 返回原始响应
+# 删除不再需要的复杂过滤函数 - 现在在消息获取阶段就直接映射用户名
 
 def build_daily_message_summary(messages):
     """构建每日消息摘要"""
@@ -502,20 +509,10 @@ def build_daily_message_summary(messages):
     
     for i, msg in enumerate(sorted_messages):
         msg_type = msg.get('msg_type', '')
-        sender_id = msg.get('sender', {}).get('id', 'unknown')
+        sender_info = msg.get('sender', {})
         
-        # 获取真实用户名，并统一映射为真实团队成员
-        sender_name = get_user_name_by_feishu_id(sender_id)
-        
-        # 将发送者统一映射为真实团队成员
-        if sender_name in ['钟悦心', '小钟阿朱', '小明']:
-            sender_name = '小钟'
-        elif sender_name == '王子健':
-            sender_name = 'Michael'
-        elif sender_name.startswith('用户'):
-            sender_name = "团队成员"
-        elif sender_name not in ['Michael', '小钟', '国伟', '云起', 'Gauz']:
-            sender_name = "团队成员"
+        # 直接使用已经映射好的用户名
+        sender_name = sender_info.get('name', '未知用户')
         
         try:
             timestamp = datetime.fromtimestamp(int(msg.get('create_time', 0)) / 1000).strftime("%m-%d %H:%M")
@@ -1251,6 +1248,80 @@ async def process_meeting_complete(file: UploadFile = File(...)):
 # =============================================================================
 # 会议记录处理功能结束
 # =============================================================================
+
+@app.get("/debug/db-records")
+async def debug_db_records():
+    """调试用：查看数据库中今天的记录"""
+    try:
+        db_manager = get_database_manager()
+        with db_manager.get_connection() as conn:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                # 查询今天的所有记录
+                sql = """
+                SELECT id, analysis_date, analysis_timestamp, container_id, total_messages, ai_model, status
+                FROM todolist_analysis 
+                WHERE analysis_date = CURDATE()
+                ORDER BY analysis_timestamp DESC
+                """
+                cursor.execute(sql)
+                records = cursor.fetchall()
+                
+                # 格式化时间显示
+                for record in records:
+                    if record['analysis_timestamp']:
+                        record['analysis_timestamp'] = record['analysis_timestamp'].isoformat()
+                    if record['analysis_date']:
+                        record['analysis_date'] = record['analysis_date'].isoformat()
+                
+                return {
+                    "success": True,
+                    "message": f"找到今天 {len(records)} 条记录",
+                    "records": records
+                }
+                
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/debug/db-record/{record_id}")
+async def debug_db_record_detail(record_id: int):
+    """调试用：查看指定ID的记录详细内容"""
+    try:
+        db_manager = get_database_manager()
+        with db_manager.get_connection() as conn:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                # 查询分析记录
+                sql = """
+                SELECT * FROM todolist_analysis 
+                WHERE id = %s
+                """
+                cursor.execute(sql, (record_id,))
+                analysis_record = cursor.fetchone()
+                
+                # 查询任务项
+                sql = """
+                SELECT * FROM todolist_items 
+                WHERE analysis_id = %s
+                ORDER BY category, assignee, task_order
+                """
+                cursor.execute(sql, (record_id,))
+                task_items = cursor.fetchall()
+                
+                # 格式化时间显示
+                if analysis_record:
+                    if analysis_record.get('analysis_timestamp'):
+                        analysis_record['analysis_timestamp'] = analysis_record['analysis_timestamp'].isoformat()
+                    if analysis_record.get('analysis_date'):
+                        analysis_record['analysis_date'] = analysis_record['analysis_date'].isoformat()
+                
+                return {
+                    "success": True,
+                    "analysis_record": analysis_record,
+                    "task_items": task_items,
+                    "task_count": len(task_items)
+                }
+                
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":
     # 启动API服务器

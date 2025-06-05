@@ -35,14 +35,14 @@ class PersonTasks:
 
 
 class AIProjectAnalyzer:
-    def __init__(self, api_key: str = None, model: str = "google/gemini-2.5-pro-preview", api_url: str = "https://openrouter.ai/api/v1/chat/completions"):
+    def __init__(self, api_key: str = None, model: str = "deepseek-chat", api_url: str = "https://api.deepseek.com/v1/chat/completions"):
         """
         初始化AI项目分析器
         
         Args:
-            api_key: OpenRouter API密钥
-            model: 使用的模型名称（OpenRouter格式）
-            api_url: OpenRouter API地址
+            api_key: DeepSeek API密钥
+            model: 使用的模型名称（DeepSeek格式）
+            api_url: DeepSeek API地址
         """
         self.api_key = api_key
         self.model = model
@@ -50,13 +50,13 @@ class AIProjectAnalyzer:
     
     def analyze_project_context(self, messages_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        分析整个项目上下文，提取任务并按人员分组
+        对飞书群聊消息进行深度项目分析
         
         Args:
-            messages_data: 从飞书获取的消息数据
+            messages_data: 包含消息列表的字典
             
         Returns:
-            按人员分组的任务分析结果
+            包含按人员分组的任务信息的字典
         """
         print("🔍 开始项目上下文分析...")
         
@@ -72,15 +72,33 @@ class AIProjectAnalyzer:
             # 使用AI进行深度分析
             print("🤖 开始AI任务分析...")
             if not self.api_key:
-                raise ValueError("需要提供OpenRouter API密钥才能进行分析")
+                raise ValueError("需要提供DeepSeek API密钥才能进行分析")
                 
-            analysis_result = self._analyze_with_openrouter_gemini(context_data)
+            analysis_result = self._analyze_with_openrouter_deepseek(context_data)
             
-            # 后处理和统计
-            print("📋 组织分析结果...")
-            final_result = self._organize_by_person(analysis_result, messages_data)
+            # 检查AI是否直接返回了分组数据
+            if isinstance(analysis_result, dict) and 'ToDo' in analysis_result:
+                print("📋 使用AI直接返回的分组格式...")
+                # 直接使用AI返回的分组数据
+                final_result = {
+                    "success": True,
+                    "daily_todolist": analysis_result,  # 使用AI直接返回的格式
+                    "analysis_info": {
+                        "analysis_date": datetime.now().strftime("%Y-%m-%d"),
+                        "analysis_timestamp": datetime.now().isoformat(),
+                        "container_id": messages_data.get("container_id", "unknown"),
+                        "total_messages": len(messages),
+                        "ai_model": self.model
+                    },
+                    "message_count": len(messages),
+                    "status": "success"
+                }
+            else:
+                # 回退到原有的TaskItem处理方式
+                print("📋 使用TaskItem格式处理...")
+                final_result = self._organize_by_person(analysis_result, messages_data)
             
-            print(f"✅ 项目分析完成，识别出 {len(analysis_result)} 个任务项")
+            print(f"✅ 项目分析完成")
             return final_result
             
         except Exception as e:
@@ -214,18 +232,16 @@ class AIProjectAnalyzer:
         except Exception as e:
             return f"读取文档时发生错误: {str(e)}"
     
-    def _analyze_with_openrouter_gemini(self, context_data: Dict[str, Any]) -> List[TaskItem]:
-        """使用OpenRouter Gemini 2.5进行深度项目分析"""
-        print("🤖 使用OpenRouter Gemini 2.5进行项目分析...")
+    def _analyze_with_openrouter_deepseek(self, context_data: Dict[str, Any]) -> List[TaskItem]:
+        """使用DeepSeek API进行深度项目分析"""
+        print("🤖 使用DeepSeek API进行项目分析...")
         
         # 构建AI分析prompt
         prompt = self._build_comprehensive_analysis_prompt_with_documents(context_data)
         
         headers = {
-            "Content-Type": "application/json; charset=utf-8",
-            "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": "https://feishu-analyzer.com",
-            "X-Title": "Feishu Message Analyzer"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}"
         }
         
         payload = {
@@ -236,19 +252,18 @@ class AIProjectAnalyzer:
                     "content": """你是一个资深的项目管理专家和开发团队顾问。你的任务是分析开发团队的群聊记录，从中提取出真正的项目任务、已完成的工作和遇到的问题。
 
 你需要：
-1. 深度理解整个对话的上下文和项目背景
-2. 识别出具体的开发任务、功能需求、bug修复等
-3. 跟踪任务的状态变化（谁负责、是否完成、遇到什么问题）
-4. 识别任务的优先级和截止时间
-5. 按照团队成员组织任务分配
-6. 提取技术标签和关键信息
+1. 仔细阅读每一条消息，准确理解上下文
+2. 识别出明确提到的待办任务(ToDo)、已完成工作(Done)和遇到的问题(Issue)
+3. 正确归属每个任务到具体的人员
+4. 严格基于对话原文，不要推理或添加任何内容
+5. 按照指定的JSON格式准确输出
 
-重要：不要简单地对每条消息分类，而是要理解整个项目的任务流程和团队协作模式。"""
+重要：只提取对话中明确提到的内容，保持原文描述，不要概括或重写。"""
                 },
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.2,
-            "max_tokens": 1500
+            "temperature": 0.1,  # 降低温度以提高准确性
+            "max_tokens": 2000
         }
         
         response = requests.post(self.api_url, headers=headers, json=payload)
@@ -256,12 +271,21 @@ class AIProjectAnalyzer:
         if response.status_code == 200:
             result = response.json()
             ai_response = result['choices'][0]['message']['content']
-            print("✅ OpenRouter Gemini 2.5分析完成")
-            return self._parse_ai_analysis(ai_response, context_data)
+            print("✅ DeepSeek API分析完成")
+            
+            # 解析AI响应，但同时保存原始分组数据
+            tasks = self._parse_ai_analysis(ai_response, context_data)
+            
+            # 如果成功解析到分组数据，直接返回它
+            if hasattr(self, '_parsed_grouped_data') and self._parsed_grouped_data:
+                print("📋 使用AI直接返回的分组数据")
+                return self._parsed_grouped_data  # 直接返回分组数据而不是TaskItem列表
+            else:
+                print("⚠️ 未能获取到分组数据，使用TaskItem格式")
+                return tasks
         else:
-            error_msg = f"OpenRouter API调用失败，状态码: {response.status_code}, 错误信息: {response.text}"
-            print(f"❌ {error_msg}")
-            raise Exception(error_msg)
+            print(f"❌ DeepSeek API调用失败: {response.status_code} - {response.text}")
+            raise Exception(f"API调用失败: {response.status_code}")
     
     def _build_comprehensive_analysis_prompt_with_documents(self, context_data: Dict[str, Any]) -> str:
         """构建分析prompt，专注于文本消息分析"""
@@ -306,6 +330,9 @@ class AIProjectAnalyzer:
             start_time = "开始时间"
             end_time = "结束时间"
         
+        # 构建团队成员列表用于JSON格式
+        member_names = [p_info['name'] for p_info in participants.values()]
+        
         prompt = f"""请深度分析以下开发团队的项目群聊对话，提取出真正的任务信息并按人员组织：
 
 ## 基本信息
@@ -317,76 +344,83 @@ class AIProjectAnalyzer:
 
 {conversation_text}
 
-## 分析要求
+## 分析任务
 
-请从这些对话中深度挖掘并识别出：
+请从对话中准确识别以下三类信息：
 
-### 1. TODO任务 (待办事项)
-- 需要完成的开发任务、功能需求、修复工作等
-- 被明确分配给某人的工作
-- 计划中的开发内容
+### 1. ToDo (待办任务)
+- 明确提到需要完成的工作、开发任务、功能需求
+- 被分配给特定人员的任务
+- 计划要做的事情
+- 关键词：需要、要做、负责、开发、实现、完成、设计等
 
-### 2. DONE任务 (已完成)
-- 已经完成的工作、上线的功能、解决的问题等
-- 完成的开发任务和里程碑
-- 已交付的成果
+### 2. Done (已完成)
+- 明确提到已经完成的工作、解决的问题
+- 已经交付的功能、修复的bug
+- 取得的进展和成果
+- 关键词：完成了、已经、搞定、解决了、上线了、修复了等
 
-### 3. ISSUE问题 (技术问题)
-- 遇到的技术问题、bug、系统故障等
-- 开发过程中的阻塞和困难
-- 需要解决的技术难题
+### 3. Issue (遇到的问题)
+- 遇到的技术问题、困难、阻塞
+- 需要解决的bug、故障
+- 开发过程中的挑战
+- 关键词：问题、bug、出错、异常、困难、阻塞等
+
+## 重要原则
+
+1. **严格基于原文**：只提取对话中明确提到的内容，不要推理或添加
+2. **准确归属**：确保任务分配给正确的人员
+3. **分类准确**：区分清楚待办、已完成和问题
+4. **内容具体**：保留任务的具体描述，不要过度概括
 
 ## 输出格式
 
-请以JSON格式返回结果，包含详细的任务信息：
+请严格按照以下JSON格式输出，确保所有团队成员都包含在内：
 
 ```json
 {{
-  "analysis_summary": {{
-    "total_tasks_identified": 0,
-    "messages_analyzed": {context_data["total_messages"]},
-    "analysis_timestamp": "{datetime.now().isoformat()}"
+  "ToDo": {{
+    {', '.join([f'"{name}": []' for name in member_names])}
   }},
-  "tasks": [
-    {{
-      "id": "task_001",
-      "title": "实现用户登录功能",
-      "description": "需要开发用户登录页面和后端API接口，包括前端界面设计和后端认证逻辑",
-      "assignee": "张三",
-      "assignee_id": "ou_zhang",
-      "status": "TODO",
-      "priority": "HIGH",
-      "tags": ["frontend", "backend", "authentication"],
-      "deadline": "2025-06-05",
-      "source_type": "conversation",
-      "related_messages": ["msg_001", "msg_002"],
-      "confidence": 0.9
-    }}
-  ],
-  "team_summary": {{
-    "total_members": {len(participants)},
-    "task_distribution": {{
-      "张三": {{"todo": 2, "done": 1, "issue": 0}},
-      "李四": {{"todo": 1, "done": 2, "issue": 1}}
-    }}
+  "Done": {{
+    {', '.join([f'"{name}": []' for name in member_names])}
+  }},
+  "Issue": {{
+    {', '.join([f'"{name}": []' for name in member_names])}
   }}
 }}
 ```
 
-## 分析重点
+每个人员的任务数组应该包含具体的任务描述字符串。如果对话中没有明确的任务，对应数组保持为空。
 
-1. **任务关联性**: 识别同一个任务在不同消息中的提及
-2. **人员分工**: 准确识别谁负责什么任务
-3. **优先级判断**: 根据"紧急"、"重要"、"asap"等关键词判断
-4. **技术分类**: 根据技术关键词进行标签分类
-5. **状态跟踪**: 跟踪任务从提出到完成的状态变化
+## 示例输出格式
 
-请确保提取的是真正的工作任务，而不是简单的聊天内容或讨论。重点关注项目开发相关的具体工作内容。
+```json
+{{
+  "ToDo": {{
+    "张三": ["完成用户登录功能", "修复数据库连接问题"],
+    "李四": ["设计前端界面", "准备项目文档"],
+    "王五": []
+  }},
+  "Done": {{
+    "张三": ["完成了API接口开发"],
+    "李四": ["上线了用户注册功能"],
+    "王五": []
+  }},
+  "Issue": {{
+    "张三": ["数据库连接超时问题"],
+    "李四": [],
+    "王五": ["前端打包出现错误"]
+  }}
+}}
+```
+
+请仔细分析对话内容，准确提取并分类任务信息。
 """
         return prompt
     
     def _parse_ai_analysis(self, ai_response: str, context_data: Dict) -> List[TaskItem]:
-        """解析AI分析结果"""
+        """解析AI分析结果 - 现在AI直接返回分组格式"""
         try:
             # 提取JSON部分
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', ai_response, re.DOTALL)
@@ -400,33 +434,77 @@ class AIProjectAnalyzer:
                 else:
                     ai_data = json.loads(ai_response)
             
-            tasks = []
-            # 处理两种可能的格式
-            if 'tasks' in ai_data:
-                task_list = ai_data['tasks']
-            else:
-                task_list = ai_data if isinstance(ai_data, list) else []
+            # 现在AI直接返回分组格式，我们需要存储这个格式而不是转换为TaskItem列表
+            # 直接返回原始分组数据，后续处理会使用这个格式
+            self._parsed_grouped_data = ai_data
             
-            for item in task_list:
-                task = TaskItem(
-                    id=item.get("id", f"ai_task_{len(tasks)+1}"),
-                    title=item.get("title", "未知任务"),
-                    description=item.get("description", ""),
-                    assignee=item.get("assignee", "未指定"),
-                    priority=item.get("priority", "LOW"),
-                    status=item.get("status", "TODO"),
-                    tags=item.get("tags", []),
-                    deadline=item.get("deadline"),
-                    related_messages=item.get("related_messages", []),
-                    confidence=item.get("confidence", 0.7)
-                )
-                tasks.append(task)
+            # 为了兼容现有代码流程，仍然生成TaskItem列表
+            tasks = []
+            task_id = 1
+            
+            # 处理ToDo任务
+            if 'ToDo' in ai_data:
+                for person, task_list in ai_data['ToDo'].items():
+                    for task_desc in task_list:
+                        task = TaskItem(
+                            id=f"todo_{task_id}",
+                            title=task_desc,
+                            description=task_desc,
+                            assignee=person,
+                            priority="MEDIUM",
+                            status="TODO",
+                            tags=[],
+                            deadline=None,
+                            related_messages=[],
+                            confidence=0.8
+                        )
+                        tasks.append(task)
+                        task_id += 1
+            
+            # 处理Done任务
+            if 'Done' in ai_data:
+                for person, task_list in ai_data['Done'].items():
+                    for task_desc in task_list:
+                        task = TaskItem(
+                            id=f"done_{task_id}",
+                            title=task_desc,
+                            description=task_desc,
+                            assignee=person,
+                            priority="MEDIUM",
+                            status="DONE",
+                            tags=[],
+                            deadline=None,
+                            related_messages=[],
+                            confidence=0.8
+                        )
+                        tasks.append(task)
+                        task_id += 1
+            
+            # 处理Issue问题
+            if 'Issue' in ai_data:
+                for person, task_list in ai_data['Issue'].items():
+                    for task_desc in task_list:
+                        task = TaskItem(
+                            id=f"issue_{task_id}",
+                            title=task_desc,
+                            description=task_desc,
+                            assignee=person,
+                            priority="HIGH",
+                            status="ISSUE",
+                            tags=[],
+                            deadline=None,
+                            related_messages=[],
+                            confidence=0.8
+                        )
+                        tasks.append(task)
+                        task_id += 1
             
             return tasks
             
         except Exception as e:
             print(f"⚠️ 解析AI分析结果失败: {e}")
-            # 如果解析失败，返回空列表而不是回退到规则引擎
+            print(f"⚠️ AI响应内容: {ai_response[:500]}...")
+            # 如果解析失败，返回空列表
             return []
     
     def _extract_person_name(self, sender_info: Dict) -> str:

@@ -43,3 +43,4 @@ messages_*.json
 # Analysis results backups
 *_backup.json
 *_old.json 
+node_modules

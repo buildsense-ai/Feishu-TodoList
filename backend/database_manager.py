@@ -29,7 +29,7 @@ class TodoListAnalysis:
     time_range_start: datetime
     time_range_end: datetime
     total_messages: int
-    ai_model: str = 'gemini-2.5'
+    ai_model: str = 'deepseek-chat'
     analysis_type: str = 'daily_todolist'
     raw_output: str = ''
     status: str = 'success'
@@ -129,7 +129,19 @@ class DatabaseManager:
         
         # 获取其他信息
         input_data = analysis_data.get('input_data', {})
-        total_messages = input_data.get('message_count', 0) or raw_messages_data.get('total_count', 0)
+        
+        # 优先从顶层获取message_count，然后从input_data或raw_messages_data获取
+        total_messages = (
+            analysis_data.get('message_count', 0) or  # 顶层的message_count
+            input_data.get('message_count', 0) or     # input_data中的message_count  
+            raw_messages_data.get('total_count', 0) or # raw_messages_data中的total_count
+            0
+        )
+        
+        print(f"🔍 数据库保存: total_messages = {total_messages}")
+        print(f"🔍 来源数据: analysis_data.message_count = {analysis_data.get('message_count')}")
+        print(f"🔍 来源数据: input_data.message_count = {input_data.get('message_count')}")
+        print(f"🔍 来源数据: raw_messages_data.total_count = {raw_messages_data.get('total_count')}")
         
         return TodoListAnalysis(
             analysis_date=analysis_date,
@@ -137,7 +149,7 @@ class DatabaseManager:
             time_range_start=time_range_start,
             time_range_end=time_range_end,
             total_messages=total_messages,
-            ai_model=analysis_data.get('model', 'gemini-2.5'),
+            ai_model=analysis_data.get('model', 'deepseek-chat'),
             analysis_type=analysis_data.get('analysis_type', 'daily_todolist'),
             raw_output=str(analysis_data.get('daily_todolist', '')),
             status=analysis_data.get('status', 'success')
@@ -323,34 +335,58 @@ class DatabaseManager:
             print(f"⚠️ 保存消息统计失败: {e}")
     
     def get_latest_todolist(self, container_id: str = None) -> Dict:
-        """获取最新的ToDoList"""
+        """获取最新的ToDoList - 只获取今天的数据"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-                    # 构建查询条件
-                    where_clause = ""
+                    # 构建查询条件 - 只查询今天的数据
+                    where_clause = "WHERE ta.analysis_date = CURDATE()"
                     params = []
                     if container_id:
-                        where_clause = "WHERE ta.container_id = %s"
+                        where_clause += " AND ta.container_id = %s"
                         params.append(container_id)
                     
+                    # 先获取今天最新的分析记录
                     sql = f"""
                     SELECT ta.*, ti.category, ti.assignee, ti.task_content, ti.task_order
                     FROM todolist_analysis ta
                     LEFT JOIN todolist_items ti ON ta.id = ti.analysis_id
                     {where_clause}
-                    ORDER BY ta.analysis_date DESC, ti.category, ti.assignee, ti.task_order
-                    LIMIT 100
+                    ORDER BY ta.analysis_timestamp DESC, ti.category, ti.assignee, ti.task_order
+                    LIMIT 1000
                     """
                     
                     cursor.execute(sql, params)
                     results = cursor.fetchall()
                     
+                    print(f"🔍 数据库查询结果: 找到 {len(results)} 条记录")
+                    if results:
+                        print(f"🔍 第一条记录的分析时间: {results[0]['analysis_timestamp']}")
+                        print(f"🔍 第一条记录的总消息数: {results[0]['total_messages']}")
+                        print(f"🔍 第一条记录的ID: {results[0]['id']}")
+                        
+                        # 统计每个分析ID的记录数
+                        analysis_ids = {}
+                        for r in results:
+                            aid = r['id']
+                            if aid not in analysis_ids:
+                                analysis_ids[aid] = 0
+                            analysis_ids[aid] += 1
+                        print(f"🔍 分析ID统计: {analysis_ids}")
+                    
                     if not results:
+                        print("📋 今天还没有生成ToDoList数据")
                         return {}
                     
+                    # 只使用最新的分析记录（第一条记录的时间戳）
+                    latest_timestamp = results[0]['analysis_timestamp']
+                    latest_results = [r for r in results if r['analysis_timestamp'] == latest_timestamp]
+                    
+                    print(f"📋 找到今天最新的ToDoList数据，分析时间: {latest_timestamp}")
+                    print(f"📋 最新记录数量: {len(latest_results)}")
+                    
                     # 构建ToDoList结构
-                    return self._build_todolist_structure(results)
+                    return self._build_todolist_structure(latest_results)
                     
         except Exception as e:
             print(f"❌ 获取最新ToDoList失败: {e}")

@@ -117,7 +117,8 @@ class FeishuMessageFetcher:
                 "update_time": message.update_time,
                 "sender": {
                     "id": message.sender.id if message.sender else None,
-                    "sender_type": message.sender.sender_type if message.sender else None
+                    "sender_type": message.sender.sender_type if message.sender else None,
+                    "name": self._get_sender_name(message.sender.id if message.sender else None)
                 },
                 "content": None,
                 "files": [],
@@ -229,6 +230,27 @@ class FeishuMessageFetcher:
             processed_messages.append(message_data)
             
         return processed_messages
+
+    def _get_sender_name(self, sender_id: str) -> str:
+        """
+        根据sender_id获取真实的用户名
+        
+        Args:
+            sender_id: 飞书用户ID
+            
+        Returns:
+            真实的用户名
+        """
+        if not sender_id:
+            return "未知用户"
+        
+        # 导入用户映射模块
+        try:
+            from feishu_user_id_mapper import get_user_name_by_feishu_id
+            return get_user_name_by_feishu_id(sender_id)
+        except ImportError:
+            # 如果导入失败，返回简化的ID
+            return f"用户{sender_id[-4:]}" if len(sender_id) > 4 else "未知用户"
 
     def _download_resource(self, 
                          message_id: str, 
